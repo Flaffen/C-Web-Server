@@ -52,43 +52,25 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 {
 	const int max_response_size = 262144;
 	char response[max_response_size]; 
-	int response_length = 0;
+	char buf[1024];
 
-	char *myheader = "HTTP/1.1 200 OK";
-	strcat(response, myheader);
+	strcat(response, header);
 	strcat(response, "\n");
-	response_length += strlen(myheader) + 1;
 
-	time_t rawtime;
-	time(&rawtime);
-	struct tm *info = localtime(&rawtime);
-	char header_date[1024];
-	response_length += sprintf(header_date, "Date: %s", asctime(info));
-	strcat(response, header_date);
+	strcat(response, "Connection: Close\n");
 
-	char *header_connection = "Connection: close\n";
-	strcat(response, header_connection);
-	response_length += strlen(header_connection);
+	sprintf(buf, "Content-Type: %s\n", content_type);
+	strcat(response, buf);
 
-	char *header_content_length[1024];
-	response_length += sprintf(header_content_length, "Content-Length: %d\n", content_length);
-	strcat(response, header_content_length);
-
-	char header_content_type[1024];
-	response_length += sprintf(header_content_type, "Content-Type: %s\n", content_type);
-	strcat(response, header_content_type);
+	sprintf(buf, "Content-Length: %d\n", content_length);
+	strcat(response, buf);
 
 	strcat(response, "\n");
-	response_length += 1;
 
-	for (int i = 0, j = response_length; i < content_length; i++, j++) {
-		response[j] = ((char *) body)[i];
-	}
+	strcat(response, (char *) body);
 
-	response_length += content_length;
+	int response_length = strlen(response);
 
-	printf("%s", response);
-	
 	// Send it all!
 	int rv = send(fd, response, response_length, 0);
 
@@ -244,10 +226,8 @@ int main(void)
 		// newfd is a new socket descriptor for the new connection.
 		// listenfd is still listening for new connections.
 
-		// handle_http_request(newfd, cache);
-		// resp_404(newfd);
-		char *r = "HTTP/1.1 200 OK\nConnection: close\nContent-Length: 5\nContent-Type: text/plain\n\nhello";
-		send(newfd, r, strlen(r), 0);
+		handle_http_request(newfd, cache);
+		resp_404(newfd);
 
 		close(newfd);
 		printf("server: closed connection from %s\n", s);
