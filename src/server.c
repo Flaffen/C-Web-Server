@@ -50,9 +50,10 @@
  */
 int send_response(int fd, char *header, char *content_type, void *body, int content_length)
 {
-	const int max_response_size = 262144;
+	const int max_response_size = 262144 + content_length;
 	char response[max_response_size]; 
 	char buf[1024];
+	memset(response, 0, max_response_size);
 
 	strcat(response, header);
 	strcat(response, "\n");
@@ -65,11 +66,21 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 	sprintf(buf, "Content-Length: %d\n", content_length);
 	strcat(response, buf);
 
+	sprintf(buf, "Cache-Control: no-cache\n");
+	strcat(response, buf);
+
 	strcat(response, "\n");
 
-	strcat(response, (char *) body);
+	printf("%s", response);
 
 	int response_length = strlen(response);
+
+	char *arr = (char *) body;
+	for (int i = strlen(response), j = 0; j < content_length; j++, i++) {
+		response[i] = arr[j];
+	}
+
+	response_length += content_length;
 
 	// Send it all!
 	int rv = send(fd, response, response_length, 0);
@@ -88,16 +99,14 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 void get_d20(int fd)
 {
 	// Generate a random number between 1 and 20 inclusive
-
-	///////////////////
-	// IMPLEMENT ME! //
-	///////////////////
+	srand(time(NULL));
+	int rnum = (rand() % 20) + 1;
 
 	// Use send_response() to send it back as text/plain data
-
-	///////////////////
-	// IMPLEMENT ME! //
-	///////////////////
+	char rnumstr[32];
+	sprintf(rnumstr, "%d", rnum);
+	
+	send_response(fd, "HTTP/1.1 200 OK", "text/plain", rnumstr, strlen(rnumstr));
 }
 
 /**
@@ -131,9 +140,40 @@ void resp_404(int fd)
  */
 void get_file(int fd, struct cache *cache, char *request_path)
 {
-	///////////////////
-	// IMPLEMENT ME! //
-	///////////////////
+	struct cache_entry *ce = cache_get(cache, request_path);
+
+	if (!ce) {
+		printf("cache miss %s\n", request_path);
+		// sleep(1);
+		char path[512] = {0};
+		strcat(path, "serverroot/");
+		strcat(path, request_path);
+
+		FILE *f = fopen(path, "r");
+
+		if (f == NULL) {
+			resp_404(fd);
+			return;
+		}
+
+		fseek(f, 0L, SEEK_END);
+		long int bufsize = ftell(f);
+		fseek(f, 0L, SEEK_SET);
+
+		unsigned char *buf;
+		buf = malloc(bufsize * sizeof(char));
+		fread(buf, 1, bufsize, f);
+		fclose(f);
+
+		char *mime_type = mime_type_get(request_path);
+		cache_put(cache, request_path, mime_type, buf, bufsize);
+		ce = cache_get(cache, request_path);
+	}
+
+	printf("au?\n");
+	if (ce == NULL) printf("ITS NULL CARL\n");
+	send_response(fd, "HTTP/1.1 200 OK", ce->content_type, ce->content, ce->content_length);
+	printf("wow\n");
 }
 
 /**
@@ -165,12 +205,25 @@ void handle_http_request(int fd, struct cache *cache)
 		return;
 	}
 
+	printf("%s", request);
 
-	///////////////////
-	// IMPLEMENT ME! //
-	///////////////////
+	char line[1024] = {0};
+	char path[256] = {0};
+	int i;
+	for (i = 0; request[i] != '\n'; i++) {
+		line[i] = request[i];
+	}
+	line[i] = '\0';
+	
+	if (line[0] == 'G') {
+		int rv = sscanf(line, "GET /%s HTTP/1.1", path);
 
-	// Read the first two components of the first line of the request 
+		if (strcmp(path, "d20") == 0) {
+			get_d20(fd);
+		} else {
+			get_file(fd, cache, path);
+		}
+	}
 
 	// If GET, handle the get endpoints
 
@@ -190,7 +243,7 @@ int main(void)
 	struct sockaddr_storage their_addr; // connector's address information
 	char s[INET6_ADDRSTRLEN];
 
-	struct cache *cache = cache_create(10, 0);
+	struct cache *cache = cache_create(3, 0);
 
 	// Get a listening socket
 	int listenfd = get_listener_socket(PORT);
@@ -221,13 +274,12 @@ int main(void)
 		inet_ntop(their_addr.ss_family,
 				get_in_addr((struct sockaddr *)&their_addr),
 				s, sizeof s);
-		printf("server: got connection from %s\n", s);
+		printf("\n\nserver: got connection from %s\n", s);
 
 		// newfd is a new socket descriptor for the new connection.
 		// listenfd is still listening for new connections.
 
 		handle_http_request(newfd, cache);
-		resp_404(newfd);
 
 		close(newfd);
 		printf("server: closed connection from %s\n", s);
