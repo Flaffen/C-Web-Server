@@ -247,7 +247,7 @@ int main(void)
 	struct sockaddr_storage their_addr; // connector's address information
 	char s[INET6_ADDRSTRLEN];
 
-	struct cache *cache = cache_create(3, 0);
+	struct cache *cache = cache_create(5, 0);
 
 	// Get a listening socket
 	int listenfd = get_listener_socket(PORT);
