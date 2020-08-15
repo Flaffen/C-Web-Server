@@ -210,6 +210,7 @@ void handle_http_request(int fd, struct cache *cache)
 
 	char line[1024] = {0};
 	char path[256] = {0};
+	char name[256] = {0};
 	int i;
 	for (i = 0; request[i] != '\n'; i++) {
 		line[i] = request[i];
@@ -220,12 +221,15 @@ void handle_http_request(int fd, struct cache *cache)
 	printf("-----\n");
 
 	if (line[0] == 'G') {
-		int rv = sscanf(line, "GET /%s HTTP/1.1", path);
+		sscanf(line, "GET %s HTTP/1.1", path);
+		sscanf(path, "/%s", name);
 
 		if (strcmp(path, "d20") == 0) {
 			get_d20(fd);
+		} else if (strcmp(path, "/") == 0) {
+			get_file(fd, cache, "index.html");
 		} else {
-			get_file(fd, cache, path);
+			get_file(fd, cache, name);
 		}
 	}
 
