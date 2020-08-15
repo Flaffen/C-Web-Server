@@ -46,10 +46,10 @@ printf("%d %s\n", q->bar, q->baz); // 12 Hello
 
 // Hash table entry
 struct htent {
-    void *key;
-    int key_size;
-    int hashed_key;
-    void *data;
+	void *key;
+	int key_size;
+	int hashed_key;
+	void *data;
 };
 
 // Used to cleanup the linked lists
@@ -63,8 +63,8 @@ struct foreach_callback_payload {
  */
 void add_entry_count(struct hashtable *ht, int d)
 {
-    ht->num_entries += d;
-    ht->load = (float)ht->num_entries / ht->size;
+	ht->num_entries += d;
+	ht->load = (float)ht->num_entries / ht->size;
 }
 
 /**
@@ -72,15 +72,15 @@ void add_entry_count(struct hashtable *ht, int d)
  */
 int default_hashf(void *data, int data_size, int bucket_count)
 {
-    const int R = 31; // Small prime
-    int h = 0;
-    unsigned char *p = data;
+	const int R = 31; // Small prime
+	int h = 0;
+	unsigned char *p = data;
 
-    for (int i = 0; i < data_size; i++) {
-        h = (R * h + p[i]) % bucket_count;
-    }
+	for (int i = 0; i < data_size; i++) {
+		h = (R * h + p[i]) % bucket_count;
+	}
 
-    return h;
+	return h;
 }
 
 /**
@@ -88,29 +88,29 @@ int default_hashf(void *data, int data_size, int bucket_count)
  */
 struct hashtable *hashtable_create(int size, int (*hashf)(void *, int, int))
 {
-    if (size < 1) {
-        size = DEFAULT_SIZE;
-    }
+	if (size < 1) {
+		size = DEFAULT_SIZE;
+	}
 
-    if (hashf == NULL) {
-        hashf = default_hashf;
-    }
+	if (hashf == NULL) {
+		hashf = default_hashf;
+	}
 
-    struct hashtable *ht = malloc(sizeof *ht);
+	struct hashtable *ht = malloc(sizeof *ht);
 
-    if (ht == NULL) return NULL;
+	if (ht == NULL) return NULL;
 
-    ht->size = size;
-    ht->num_entries = 0;
-    ht->load = 0;
-    ht->bucket = malloc(size * sizeof(struct llist *));
-    ht->hashf = hashf;
+	ht->size = size;
+	ht->num_entries = 0;
+	ht->load = 0;
+	ht->bucket = malloc(size * sizeof(struct llist *));
+	ht->hashf = hashf;
 
-    for (int i = 0; i < size; i++) {
-        ht->bucket[i] = llist_create();
-    }
+	for (int i = 0; i < size; i++) {
+		ht->bucket[i] = llist_create();
+	}
 
-    return ht;
+	return ht;
 }
 
 /**
@@ -130,14 +130,14 @@ void htent_free(void *htent, void *arg)
  */
 void hashtable_destroy(struct hashtable *ht)
 {
-    for (int i = 0; i < ht->size; i++) {
-        struct llist *llist = ht->bucket[i];
+	for (int i = 0; i < ht->size; i++) {
+		struct llist *llist = ht->bucket[i];
 
 		llist_foreach(llist, htent_free, NULL);
-        llist_destroy(llist);
-    }
+		llist_destroy(llist);
+	}
 
-    free(ht);
+	free(ht);
 }
 
 /**
@@ -145,7 +145,7 @@ void hashtable_destroy(struct hashtable *ht)
  */
 void *hashtable_put(struct hashtable *ht, char *key, void *data)
 {
-    return hashtable_put_bin(ht, key, strlen(key), data);
+	return hashtable_put_bin(ht, key, strlen(key), data);
 }
 
 /**
@@ -153,26 +153,26 @@ void *hashtable_put(struct hashtable *ht, char *key, void *data)
  */
 void *hashtable_put_bin(struct hashtable *ht, void *key, int key_size, void *data)
 {
-    int index = ht->hashf(key, key_size, ht->size);
+	int index = ht->hashf(key, key_size, ht->size);
 
-    struct llist *llist = ht->bucket[index];
+	struct llist *llist = ht->bucket[index];
 
-    struct htent *ent = malloc(sizeof *ent);
-    ent->key = malloc(key_size);
-    memcpy(ent->key, key, key_size);
-    ent->key_size = key_size;
-    ent->hashed_key = index;
-    ent->data = data;
+	struct htent *ent = malloc(sizeof *ent);
+	ent->key = malloc(key_size);
+	memcpy(ent->key, key, key_size);
+	ent->key_size = key_size;
+	ent->hashed_key = index;
+	ent->data = data;
 
-    if (llist_append(llist, ent) == NULL) {
-        free(ent->key);
-        free(ent);
-        return NULL;
-    }
+	if (llist_append(llist, ent) == NULL) {
+		free(ent->key);
+		free(ent);
+		return NULL;
+	}
 
-    add_entry_count(ht, +1);
+	add_entry_count(ht, +1);
 
-    return data;
+	return data;
 }
 
 /**
@@ -180,15 +180,15 @@ void *hashtable_put_bin(struct hashtable *ht, void *key, int key_size, void *dat
  */
 int htcmp(void *a, void *b)
 {
-    struct htent *entA = a, *entB = b;
+	struct htent *entA = a, *entB = b;
 
-    int size_diff = entB->key_size - entA->key_size;
+	int size_diff = entB->key_size - entA->key_size;
 
-    if (size_diff) {
-        return size_diff;
-    }
+	if (size_diff) {
+		return size_diff;
+	}
 
-    return memcmp(entA->key, entB->key, entA->key_size);
+	return memcmp(entA->key, entB->key, entA->key_size);
 }
 
 /**
@@ -196,7 +196,7 @@ int htcmp(void *a, void *b)
  */
 void *hashtable_get(struct hashtable *ht, char *key)
 {
-    return hashtable_get_bin(ht, key, strlen(key));
+	return hashtable_get_bin(ht, key, strlen(key));
 }
 
 /**
@@ -204,19 +204,19 @@ void *hashtable_get(struct hashtable *ht, char *key)
  */
 void *hashtable_get_bin(struct hashtable *ht, void *key, int key_size)
 {
-    int index = ht->hashf(key, key_size, ht->size);
+	int index = ht->hashf(key, key_size, ht->size);
 
-    struct llist *llist = ht->bucket[index];
+	struct llist *llist = ht->bucket[index];
 
-    struct htent cmpent;
-    cmpent.key = key;
-    cmpent.key_size = key_size;
+	struct htent cmpent;
+	cmpent.key = key;
+	cmpent.key_size = key_size;
 
-    struct htent *n = llist_find(llist, &cmpent, htcmp);
+	struct htent *n = llist_find(llist, &cmpent, htcmp);
 
-    if (n == NULL) { return NULL; }
+	if (n == NULL) { return NULL; }
 
-    return n->data;
+	return n->data;
 }
 
 /**
@@ -224,7 +224,7 @@ void *hashtable_get_bin(struct hashtable *ht, void *key, int key_size)
  */
 void *hashtable_delete(struct hashtable *ht, char *key)
 {
-    return hashtable_delete_bin(ht, key, strlen(key));
+	return hashtable_delete_bin(ht, key, strlen(key));
 }
 
 /**
@@ -234,15 +234,15 @@ void *hashtable_delete(struct hashtable *ht, char *key)
  */
 void *hashtable_delete_bin(struct hashtable *ht, void *key, int key_size)
 {
-    int index = ht->hashf(key, key_size, ht->size);
+	int index = ht->hashf(key, key_size, ht->size);
 
-    struct llist *llist = ht->bucket[index];
+	struct llist *llist = ht->bucket[index];
 
-    struct htent cmpent;
-    cmpent.key = key;
-    cmpent.key_size = key_size;
+	struct htent cmpent;
+	cmpent.key = key;
+	cmpent.key_size = key_size;
 
-    struct htent *ent = llist_delete(llist, &cmpent, htcmp);
+	struct htent *ent = llist_delete(llist, &cmpent, htcmp);
 
 	if (ent == NULL) {
 		return NULL;
@@ -252,7 +252,7 @@ void *hashtable_delete_bin(struct hashtable *ht, void *key, int key_size)
 
 	free(ent);
 
-    add_entry_count(ht, -1);
+	add_entry_count(ht, -1);
 
 	return data;
 }

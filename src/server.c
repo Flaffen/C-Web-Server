@@ -105,7 +105,7 @@ void get_d20(int fd)
 	// Use send_response() to send it back as text/plain data
 	char rnumstr[32];
 	sprintf(rnumstr, "%d", rnum);
-	
+
 	send_response(fd, "HTTP/1.1 200 OK", "text/plain", rnumstr, strlen(rnumstr));
 }
 
@@ -142,12 +142,16 @@ void get_file(int fd, struct cache *cache, char *request_path)
 {
 	struct cache_entry *ce = cache_get(cache, request_path);
 
-	if (!ce) {
-		printf("cache miss %s\n", request_path);
-		// sleep(1);
+	if (ce == NULL) {
+		long int bufsize;
+		unsigned char *buf;
+		char *mime_type;
 		char path[512] = {0};
+
 		strcat(path, "serverroot/");
 		strcat(path, request_path);
+
+		printf("%s\n", path);
 
 		FILE *f = fopen(path, "r");
 
@@ -157,23 +161,22 @@ void get_file(int fd, struct cache *cache, char *request_path)
 		}
 
 		fseek(f, 0L, SEEK_END);
-		long int bufsize = ftell(f);
+		bufsize = ftell(f);
 		fseek(f, 0L, SEEK_SET);
 
-		unsigned char *buf;
 		buf = malloc(bufsize * sizeof(char));
 		fread(buf, 1, bufsize, f);
+
 		fclose(f);
 
-		char *mime_type = mime_type_get(request_path);
+		mime_type = mime_type_get(request_path);
 		cache_put(cache, request_path, mime_type, buf, bufsize);
 		ce = cache_get(cache, request_path);
 	}
 
-	printf("au?\n");
-	if (ce == NULL) printf("ITS NULL CARL\n");
+	cache_print(cache);
+
 	send_response(fd, "HTTP/1.1 200 OK", ce->content_type, ce->content, ce->content_length);
-	printf("wow\n");
 }
 
 /**
@@ -205,16 +208,17 @@ void handle_http_request(int fd, struct cache *cache)
 		return;
 	}
 
-	printf("%s", request);
-
 	char line[1024] = {0};
 	char path[256] = {0};
 	int i;
 	for (i = 0; request[i] != '\n'; i++) {
 		line[i] = request[i];
 	}
-	line[i] = '\0';
-	
+
+	printf("-----\n");
+	printf("%s\n", line);
+	printf("-----\n");
+
 	if (line[0] == 'G') {
 		int rv = sscanf(line, "GET /%s HTTP/1.1", path);
 
@@ -274,7 +278,7 @@ int main(void)
 		inet_ntop(their_addr.ss_family,
 				get_in_addr((struct sockaddr *)&their_addr),
 				s, sizeof s);
-		printf("\n\nserver: got connection from %s\n", s);
+		printf("server: got connection from %s\n", s);
 
 		// newfd is a new socket descriptor for the new connection.
 		// listenfd is still listening for new connections.
