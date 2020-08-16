@@ -224,20 +224,15 @@ void handle_http_request(int fd, struct cache *cache)
 		sscanf(line, "GET %s HTTP/1.1", path);
 		sscanf(path, "/%s", name);
 
-		if (strcmp(path, "d20") == 0) {
+		if (strcmp(path, "/d20") == 0) {
 			get_d20(fd);
 		} else if (strcmp(path, "/") == 0) {
-			get_file(fd, cache, "index.html");
+			strcat(name, "index.html");
+			get_file(fd, cache, name);
 		} else {
 			get_file(fd, cache, name);
 		}
 	}
-
-	// If GET, handle the get endpoints
-
-	//    Check if it's /d20 and handle that special case
-	//    Otherwise serve the requested file by calling get_file()
-
 
 	// (Stretch) If POST, handle the post request
 }
