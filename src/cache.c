@@ -3,6 +3,7 @@
 #include <string.h>
 #include "hashtable.h"
 #include "cache.h"
+#include "time.h"
 
 /**
  * Allocate a cache entry
@@ -23,6 +24,7 @@ struct cache_entry *alloc_entry(char *path, char *content_type, void *content, i
 	ce->content_type = content_typea;
 	ce->content_length = content_length;
 	ce->content = content;
+	ce->created_at = time(NULL);
 
 	ce->prev = ce->next = NULL;
 
@@ -166,6 +168,46 @@ struct cache_entry *cache_get(struct cache *cache, char *path)
 		dllist_move_to_head(cache, ce);
 		return ce;
 	}
+}
+
+void cache_delete(struct cache *cache, struct cache_entry *ce)
+{
+	struct cache_entry *cur = cache->head;
+
+	if (cur == NULL) {
+		return;
+	}
+
+	hashtable_delete(cache->index, ce->path);
+
+	if (cur->prev == NULL && cur->next == NULL) {
+		free_entry(cur);
+		cache->head = cache->tail = NULL;
+		return;
+	}
+
+	if (cur->prev == NULL) {
+		cur->next->prev = NULL;
+		cache->head = cur->next;
+		free_entry(cur);
+
+		return;
+	}
+
+	if (cur->next == NULL) {
+		cur->prev->next = NULL;
+		cache->tail = cur->prev;
+		free_entry(cur);
+
+		return;
+	}
+
+	while (cur != ce)
+		cur = cur->next;
+
+	cur->prev->next = cur->next;
+	cur->prev = cur->prev;
+	free_entry(cur);
 }
 
 void cache_print(struct cache *cache)

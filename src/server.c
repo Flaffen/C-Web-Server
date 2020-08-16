@@ -135,43 +135,77 @@ void resp_404(int fd)
 	file_free(filedata);
 }
 
+/*
+unsigned char *load_file(char *filename)
+{
+	long int bufsize;
+	unsigned char *buf;
+
+	FILE *f = fopen(path, "r");
+
+	if (f == NULL) {
+		resp_404(fd);
+		return;
+	}
+
+	fseek(f, 0L, SEEK_END);
+	bufsize = ftell(f);
+	fseek(f, 0L, SEEK_SET);
+
+	buf = malloc(bufsize * sizeof(char));
+	fread(buf, 1, bufsize, f);
+
+	fclose(f);
+
+	return buf;
+}
+*/
+
 /**
  * Read and return a file from disk or cache
  */
 void get_file(int fd, struct cache *cache, char *request_path)
 {
 	struct cache_entry *ce = cache_get(cache, request_path);
+	char *mime_type;
+	char path[512] = {0};
+	struct file_data *file;
+
+	strcat(path, "serverroot/");
+	strcat(path, request_path);
+
+	printf("%s\n", path);
 
 	if (ce == NULL) {
-		long int bufsize;
-		unsigned char *buf;
-		char *mime_type;
-		char path[512] = {0};
+		file = file_load(path);
 
-		strcat(path, "serverroot/");
-		strcat(path, request_path);
-
-		printf("%s\n", path);
-
-		FILE *f = fopen(path, "r");
-
-		if (f == NULL) {
+		if (file == NULL) {
 			resp_404(fd);
 			return;
 		}
 
-		fseek(f, 0L, SEEK_END);
-		bufsize = ftell(f);
-		fseek(f, 0L, SEEK_SET);
-
-		buf = malloc(bufsize * sizeof(char));
-		fread(buf, 1, bufsize, f);
-
-		fclose(f);
-
 		mime_type = mime_type_get(request_path);
-		cache_put(cache, request_path, mime_type, buf, bufsize);
+		cache_put(cache, request_path, mime_type, file->data, file->size);
 		ce = cache_get(cache, request_path);
+		free(file);
+	} else {
+		time_t now = time(NULL);
+
+		if ((now - ce->created_at) > 60) {
+			cache_delete(cache, ce);
+
+			file = file_load(path);
+
+			if (file == NULL) {
+				resp_404(fd);
+				return;
+			}
+
+			mime_type = mime_type_get(request_path);
+			cache_put(cache, request_path, mime_type, file->data, file->size);
+			ce = cache_get(cache, request_path);
+			free(file);
+		}
 	}
 
 	cache_print(cache);

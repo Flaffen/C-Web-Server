@@ -7,6 +7,7 @@ struct cache_entry {
     char *content_type;
     int content_length;
     void *content;
+    time_t created_at;
 
     struct cache_entry *prev, *next; // Doubly-linked list
 };
@@ -25,6 +26,7 @@ extern struct cache *cache_create(int max_size, int hashsize);
 extern void cache_free(struct cache *cache);
 extern void cache_put(struct cache *cache, char *path, char *content_type, void *content, int content_length);
 extern struct cache_entry *cache_get(struct cache *cache, char *path);
+extern void cache_delete(struct cache *cache, struct cache_entry *ce);
 extern void cache_print(struct cache *cache);
 
 #endif
