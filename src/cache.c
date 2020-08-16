@@ -179,6 +179,7 @@ void cache_delete(struct cache *cache, struct cache_entry *ce)
 	}
 
 	hashtable_delete(cache->index, ce->path);
+	cache->cur_size--;
 
 	if (cur->prev == NULL && cur->next == NULL) {
 		free_entry(cur);
