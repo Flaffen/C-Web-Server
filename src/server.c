@@ -123,9 +123,9 @@ void resp_404(int fd)
 	filedata = file_load(filepath);
 
 	if (filedata == NULL) {
-		// TODO: make this non-fatal
-		fprintf(stderr, "cannot find system 404 file\n");
-		exit(3);
+		char *response404 = "404 FILE NOT FOUND";
+		send_response(fd, "HTTP/1.1 404 NOT FOUND", "text/plain", response404, strlen(response404));
+		return;
 	}
 
 	mime_type = mime_type_get(filepath);
@@ -246,7 +246,7 @@ int main(void)
 	struct sockaddr_storage their_addr; // connector's address information
 	char s[INET6_ADDRSTRLEN];
 
-	struct cache *cache = cache_create(5, 0);
+	struct cache *cache = cache_create(50, 0);
 
 	// Get a listening socket
 	int listenfd = get_listener_socket(PORT);

@@ -172,15 +172,19 @@ void cache_print(struct cache *cache)
 {
 	struct cache_entry *ce = cache->head;
 
+	printf("{\n");
+	int i = 1;
 	if (ce == NULL) {
 		printf("null");
 		return;
 	} else {
 		while (ce != NULL) {
-			printf("%s->", ce->path);
+			printf("\t%d: %s\n", i, ce->path);
 			ce = ce->next;
+			i++;
 		}
 	}
+	printf("}\n");
 
 	printf("\n");
 }
