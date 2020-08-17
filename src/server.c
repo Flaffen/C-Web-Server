@@ -51,9 +51,11 @@
 int send_response(int fd, char *header, char *content_type, void *body, int content_length)
 {
 	const int max_response_size = 262144 + content_length;
-	char response[max_response_size]; 
+	char response[max_response_size];
 	char buf[1024];
+
 	memset(response, 0, max_response_size);
+	memset(buf, 0, 1024);
 
 	strcat(response, header);
 	strcat(response, "\n");
@@ -66,7 +68,7 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 	sprintf(buf, "Content-Length: %d\n", content_length);
 	strcat(response, buf);
 
-	sprintf(buf, "Cache-Control: no-cache\n");
+	sprintf(buf, "Cache-Control: no-store\n");
 	strcat(response, buf);
 
 	strcat(response, "\n");
@@ -76,7 +78,7 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 	int response_length = strlen(response);
 
 	char *arr = (char *) body;
-	for (int i = strlen(response), j = 0; j < content_length; j++, i++) {
+	for (int i = response_length, j = 0; j < content_length; j++, i++) {
 		response[i] = arr[j];
 	}
 
@@ -250,9 +252,7 @@ void handle_http_request(int fd, struct cache *cache)
 		line[i] = request[i];
 	}
 
-	printf("-----\n");
 	printf("%s\n", line);
-	printf("-----\n");
 
 	if (line[0] == 'G') {
 		sscanf(line, "GET %s HTTP/1.1", path);
@@ -311,7 +311,7 @@ int main(void)
 		inet_ntop(their_addr.ss_family,
 				get_in_addr((struct sockaddr *)&their_addr),
 				s, sizeof s);
-		printf("server: got connection from %s\n", s);
+		printf("[%s:%d] ", s, ((struct sockaddr_in *) &their_addr)->sin_port);
 
 		// newfd is a new socket descriptor for the new connection.
 		// listenfd is still listening for new connections.
@@ -319,7 +319,7 @@ int main(void)
 		handle_http_request(newfd, cache);
 
 		close(newfd);
-		printf("server: closed connection from %s\n", s);
+		printf("%s closed\n", s);
 	}
 
 	// Unreachable code
