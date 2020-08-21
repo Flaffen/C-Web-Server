@@ -33,6 +33,7 @@
 #include "file.h"
 #include "mime.h"
 #include "cache.h"
+#include "debug.c"
 
 #define PORT "3490"  // the port users will be connecting to
 
@@ -223,9 +224,33 @@ void get_file(int fd, struct cache *cache, char *request_path)
  */
 char *find_start_of_body(char *header)
 {
-	///////////////////
-	// IMPLEMENT ME! // (Stretch)
-	///////////////////
+	int flag = 0;
+	
+	while (1) {
+		if (*header == '\n') {
+			if (flag == 1) {
+				return header++;
+			} else {
+				flag = 1;
+			}
+		} else if (*header == '\r') {
+			if (*(header + 1) == '\n') {
+				if (flag == 1) {
+					return header + 2;
+				} else {
+					flag = 1;
+					header++;
+				}
+			} else {
+				flag = 1;
+			}
+		} else {
+			if (flag == 1)
+				flag = 0;
+		}
+
+		header++;
+	}
 }
 
 /**
@@ -254,7 +279,7 @@ void handle_http_request(int fd, struct cache *cache)
 
 	printf("%s\n", line);
 
-	if (line[0] == 'G') {
+	if (line[0] == 'x') {
 		sscanf(line, "GET %s HTTP/1.1", path);
 		sscanf(path, "/%s", name);
 
@@ -266,9 +291,18 @@ void handle_http_request(int fd, struct cache *cache)
 		} else {
 			get_file(fd, cache, name);
 		}
-	}
+	} else {
+		// Assume it's a POST request for now.
 
-	// (Stretch) If POST, handle the post request
+		char *start_of_body = find_start_of_body(request);
+
+		if (*start_of_body == '\0')
+			printf("yay\n");
+		else {
+			hexdump(request, bytes_recvd);
+			resp_404(fd);
+		}
+	}
 }
 
 /**
