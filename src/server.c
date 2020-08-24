@@ -29,6 +29,7 @@
 #include <time.h>
 #include <sys/file.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include "net.h"
 #include "file.h"
 #include "mime.h"
@@ -36,6 +37,13 @@
 #include "debug.c"
 
 #define PORT "3490"  // the port users will be connecting to
+
+pthread_mutex_t cachemutex;
+
+struct thread_data {
+	int sockfd;
+	struct cache *cache;
+};
 
 #define SERVER_FILES "./serverfiles"
 #define SERVER_ROOT "./serverroot"
@@ -169,7 +177,9 @@ unsigned char *load_file(char *filename)
  */
 void get_file(int fd, struct cache *cache, char *request_path)
 {
+	pthread_mutex_lock(&cachemutex);
 	struct cache_entry *ce = cache_get(cache, request_path);
+	pthread_mutex_unlock(&cachemutex);
 	char *mime_type;
 	char path[512] = {0};
 	struct file_data *file;
@@ -188,13 +198,16 @@ void get_file(int fd, struct cache *cache, char *request_path)
 		}
 
 		mime_type = mime_type_get(request_path);
+		pthread_mutex_lock(&cachemutex);
 		cache_put(cache, request_path, mime_type, file->data, file->size);
 		ce = cache_get(cache, request_path);
+		pthread_mutex_unlock(&cachemutex);
 		free(file);
 	} else {
 		time_t now = time(NULL);
 
 		if ((now - ce->created_at) > 60) {
+			pthread_mutex_lock(&cachemutex);
 			cache_delete(cache, ce);
 
 			file = file_load(path);
@@ -207,11 +220,10 @@ void get_file(int fd, struct cache *cache, char *request_path)
 			mime_type = mime_type_get(request_path);
 			cache_put(cache, request_path, mime_type, file->data, file->size);
 			ce = cache_get(cache, request_path);
+			pthread_mutex_unlock(&cachemutex);
 			free(file);
 		}
 	}
-
-	cache_print(cache);
 
 	send_response(fd, "HTTP/1.1 200 OK", ce->content_type, ce->content, ce->content_length);
 }
@@ -253,6 +265,36 @@ char *find_start_of_body(char *header)
 	}
 }
 
+int get_content_length(char *request)
+{
+	char line[512];
+	memset(line, 0, 512);
+
+	char *tmp = strstr(request, "Content-Length");
+
+	for (int i = 0; i < 512; i++, tmp++) {
+		if (*tmp == '\r') {
+			break;
+		} else {
+			line[i] = *tmp;
+		}
+	}
+
+	int content_length;
+
+	sscanf(line, "Content-Length: %d", &content_length);
+
+	return content_length;
+}
+
+void post_save(void *data, int len) {
+	FILE *f = fopen("serverroot/hexdump.bin", "w");
+
+	fwrite(data, 1, len, f);
+
+	fclose(f);
+}
+
 /**
  * Handle HTTP request and send response
  */
@@ -279,7 +321,7 @@ void handle_http_request(int fd, struct cache *cache)
 
 	printf("%s\n", line);
 
-	if (line[0] == 'x') {
+	if (line[0] == 'G') {
 		sscanf(line, "GET %s HTTP/1.1", path);
 		sscanf(path, "/%s", name);
 
@@ -299,10 +341,27 @@ void handle_http_request(int fd, struct cache *cache)
 		if (*start_of_body == '\0')
 			printf("yay\n");
 		else {
-			hexdump(request, bytes_recvd);
-			resp_404(fd);
+			int content_length = get_content_length(request);
+
+			post_save(start_of_body, content_length);
+
+			char *response = "{\"status\": \"ok\"}";
+
+			send_response(fd, "HTTP/1.1 200 OK", "text/json", response, strlen(response));
 		}
 	}
+}
+
+void *thread_handle_request(void *data)
+{
+	struct thread_data *tdata = (struct thread_data *) data;
+
+	handle_http_request(tdata->sockfd, tdata->cache);
+
+	close(tdata->sockfd);
+	free(tdata);
+
+	pthread_exit((void *) 0);
 }
 
 /**
@@ -310,11 +369,14 @@ void handle_http_request(int fd, struct cache *cache)
  */
 int main(void)
 {
-	int newfd;  // listen on sock_fd, new connection on newfd
-	struct sockaddr_storage their_addr; // connector's address information
+	int newfd;
+	struct sockaddr_storage their_addr;
 	char s[INET6_ADDRSTRLEN];
+	pthread_t threadid;
 
 	struct cache *cache = cache_create(50, 0);
+	threadid = 0;
+	pthread_mutex_init(&cachemutex, NULL);
 
 	// Get a listening socket
 	int listenfd = get_listener_socket(PORT);
@@ -326,38 +388,28 @@ int main(void)
 
 	printf("webserver: waiting for connections on port %s...\n", PORT);
 
-	// This is the main loop that accepts incoming connections and
-	// responds to the request. The main parent process
-	// then goes back to waiting for new connections.
+	while (1) {
+		socklen_t sin_size = sizeof(their_addr);
 
-	while(1) {
-		socklen_t sin_size = sizeof their_addr;
-
-		// Parent process will block on the accept() call until someone
-		// makes a new connection:
-		newfd = accept(listenfd, (struct sockaddr *)&their_addr, &sin_size);
+		newfd = accept(listenfd, (struct sockaddr *) &their_addr, &sin_size);
 		if (newfd == -1) {
 			perror("accept");
 			continue;
 		}
 
-		// Print out a message that we got the connection
 		inet_ntop(their_addr.ss_family,
 				get_in_addr((struct sockaddr *)&their_addr),
 				s, sizeof s);
-		printf("[%s:%d] ", s, ((struct sockaddr_in *) &their_addr)->sin_port);
+		printf("Connection from [%s:%d]\n", s, ((struct sockaddr_in *) &their_addr)->sin_port);
 
-		// newfd is a new socket descriptor for the new connection.
-		// listenfd is still listening for new connections.
-
-		handle_http_request(newfd, cache);
-
-		close(newfd);
-		printf("%s closed\n", s);
+		struct thread_data *data = malloc(sizeof(struct thread_data));
+		data->sockfd = newfd;
+		data->cache = cache;
+		pthread_create(&threadid, NULL, thread_handle_request, (void *) data);
+		threadid++;
 	}
 
 	// Unreachable code
 
 	return 0;
 }
-
