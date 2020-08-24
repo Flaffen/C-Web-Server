@@ -103,7 +103,6 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 	return rv;
 }
 
-
 /**
  * Send a /d20 endpoint response
  */
@@ -130,7 +129,7 @@ void resp_404(int fd)
 	char *mime_type;
 
 	// Fetch the 404.html file
-	snprintf(filepath, sizeof filepath, "%s/404.html", SERVER_FILES);
+	snprintf(filepath, sizeof(filepath), "%s/404.html", SERVER_FILES);
 	filedata = file_load(filepath);
 
 	if (filedata == NULL) {
@@ -146,17 +145,20 @@ void resp_404(int fd)
 	file_free(filedata);
 }
 
-/*
-unsigned char *load_file(char *filename)
+struct myfile_data {
+	char *buf;
+	long int bufsize;
+};
+
+struct myfile_data *load_file(char *filename)
 {
 	long int bufsize;
 	unsigned char *buf;
 
-	FILE *f = fopen(path, "r");
+	FILE *f = fopen(filename, "r");
 
 	if (f == NULL) {
-		resp_404(fd);
-		return;
+		return NULL;
 	}
 
 	fseek(f, 0L, SEEK_END);
@@ -168,21 +170,22 @@ unsigned char *load_file(char *filename)
 
 	fclose(f);
 
-	return buf;
+	struct myfile_data *mfd = malloc(sizeof(struct myfile_data));
+	mfd->buf = buf;
+	mfd->bufsize = bufsize;
+
+	return mfd;
 }
-*/
 
 /**
  * Read and return a file from disk or cache
  */
 void get_file(int fd, struct cache *cache, char *request_path)
 {
-	pthread_mutex_lock(&cachemutex);
 	struct cache_entry *ce = cache_get(cache, request_path);
-	pthread_mutex_unlock(&cachemutex);
 	char *mime_type;
 	char path[512] = {0};
-	struct file_data *file;
+	struct myfile_data *file;
 
 	strcat(path, "serverroot/");
 	strcat(path, request_path);
@@ -190,7 +193,8 @@ void get_file(int fd, struct cache *cache, char *request_path)
 	printf("%s\n", path);
 
 	if (ce == NULL) {
-		file = file_load(path);
+		// file = file_load(path);
+		struct myfile_data *file = load_file(path);
 
 		if (file == NULL) {
 			resp_404(fd);
@@ -198,19 +202,16 @@ void get_file(int fd, struct cache *cache, char *request_path)
 		}
 
 		mime_type = mime_type_get(request_path);
-		pthread_mutex_lock(&cachemutex);
-		cache_put(cache, request_path, mime_type, file->data, file->size);
+		cache_put(cache, request_path, mime_type, file->buf, file->bufsize);
 		ce = cache_get(cache, request_path);
-		pthread_mutex_unlock(&cachemutex);
 		free(file);
 	} else {
 		time_t now = time(NULL);
 
 		if ((now - ce->created_at) > 60) {
-			pthread_mutex_lock(&cachemutex);
 			cache_delete(cache, ce);
 
-			file = file_load(path);
+			file = load_file(path);
 
 			if (file == NULL) {
 				resp_404(fd);
@@ -218,12 +219,13 @@ void get_file(int fd, struct cache *cache, char *request_path)
 			}
 
 			mime_type = mime_type_get(request_path);
-			cache_put(cache, request_path, mime_type, file->data, file->size);
+			cache_put(cache, request_path, mime_type, file->buf, file->bufsize);
 			ce = cache_get(cache, request_path);
-			pthread_mutex_unlock(&cachemutex);
 			free(file);
 		}
 	}
+
+	cache_print(cache);
 
 	send_response(fd, "HTTP/1.1 200 OK", ce->content_type, ce->content, ce->content_length);
 }
@@ -314,8 +316,7 @@ void handle_http_request(int fd, struct cache *cache)
 	char line[1024] = {0};
 	char path[256] = {0};
 	char name[256] = {0};
-	int i;
-	for (i = 0; request[i] != '\n'; i++) {
+	for (int i = 0; request[i] != '\n'; i++) {
 		line[i] = request[i];
 	}
 
@@ -329,9 +330,13 @@ void handle_http_request(int fd, struct cache *cache)
 			get_d20(fd);
 		} else if (strcmp(path, "/") == 0) {
 			strcat(name, "index.html");
+			pthread_mutex_lock(&cachemutex);
 			get_file(fd, cache, name);
+			pthread_mutex_unlock(&cachemutex);
 		} else {
+			pthread_mutex_lock(&cachemutex);
 			get_file(fd, cache, name);
+			pthread_mutex_unlock(&cachemutex);
 		}
 	} else {
 		// Assume it's a POST request for now.
@@ -400,7 +405,7 @@ int main(void)
 		inet_ntop(their_addr.ss_family,
 				get_in_addr((struct sockaddr *)&their_addr),
 				s, sizeof s);
-		printf("Connection from [%s:%d]\n", s, ((struct sockaddr_in *) &their_addr)->sin_port);
+		printf("[%s:%d]\n", s, ((struct sockaddr_in *) &their_addr)->sin_port);
 
 		struct thread_data *data = malloc(sizeof(struct thread_data));
 		data->sockfd = newfd;
