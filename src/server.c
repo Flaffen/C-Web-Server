@@ -69,7 +69,7 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 	strcat(response, header);
 	strcat(response, "\n");
 
-	strcat(response, "Connection: Close\n");
+	//strcat(response, "Connection: Close\n");
 
 	sprintf(buf, "Content-Type: %s\n", content_type);
 	strcat(response, buf);
@@ -287,6 +287,33 @@ int get_content_length(char *request)
 	return content_length;
 }
 
+int get_connection_header(char *request)
+{
+	char line[512];
+	memset(line, 0, 512);
+
+	char *tmp = strstr(request, "Connection");
+
+	for (int i = 0; i < 512; i++, tmp++) {
+		if (*tmp == '\r') {
+			break;
+		} else {
+			line[i] = *tmp;
+		}
+	}
+
+	char connection_header[512];
+
+	sscanf(line, "Connection: %s", connection_header);
+
+	printf("%s\n", connection_header);
+
+	if (strstr(connection_header, "close"))
+		return 1;
+	else
+		return 0;
+}
+
 void post_save(void *data, int len) {
 	FILE *f = fopen("serverroot/hexdump.bin", "w");
 
@@ -298,61 +325,67 @@ void post_save(void *data, int len) {
 /**
  * Handle HTTP request and send response
  */
-void handle_http_request(int fd, struct cache *cache)
+int handle_http_request(int fd, struct cache *cache)
 {
 	const int request_buffer_size = 65536; // 64K
 	char request[request_buffer_size];
 
 	// Read request
-	int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
+	// int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
 
+	/**
 	if (bytes_recvd < 0) {
 		perror("recv");
-		return;
+		return 1;
 	}
+	*/
 
-	char line[1024] = {0};
-	char path[256] = {0};
-	char name[256] = {0};
-	for (int i = 0; request[i] != '\n'; i++) {
-		line[i] = request[i];
-	}
+	while (recv(fd, request, request_buffer_size - 1, 0) > 0) {
+		char line[1024] = {0};
+		char path[256] = {0};
+		char name[256] = {0};
+		for (int i = 0; request[i] != '\n'; i++) {
+			line[i] = request[i];
+		}
 
-	printf("%s\n", line);
+		printf("%s\n", line);
 
-	if (line[0] == 'G') {
-		sscanf(line, "GET %s HTTP/1.1", path);
-		sscanf(path, "/%s", name);
+		if (line[0] == 'G') {
+			sscanf(line, "GET %s HTTP/1.1", path);
+			sscanf(path, "/%s", name);
 
-		if (strcmp(path, "/d20") == 0) {
-			get_d20(fd);
-		} else if (strcmp(path, "/") == 0) {
-			strcat(name, "index.html");
-			pthread_mutex_lock(&cachemutex);
-			get_file(fd, cache, name);
-			pthread_mutex_unlock(&cachemutex);
+			if (strcmp(path, "/d20") == 0) {
+				get_d20(fd);
+			} else if (strcmp(path, "/") == 0) {
+				strcat(name, "index.html");
+				pthread_mutex_lock(&cachemutex);
+				get_file(fd, cache, name);
+				pthread_mutex_unlock(&cachemutex);
+			} else {
+				pthread_mutex_lock(&cachemutex);
+				get_file(fd, cache, name);
+				pthread_mutex_unlock(&cachemutex);
+			}
 		} else {
-			pthread_mutex_lock(&cachemutex);
-			get_file(fd, cache, name);
-			pthread_mutex_unlock(&cachemutex);
-		}
-	} else {
-		// Assume it's a POST request for now.
+			// Assume it's a POST request for now.
 
-		char *start_of_body = find_start_of_body(request);
+			char *start_of_body = find_start_of_body(request);
 
-		if (*start_of_body == '\0')
-			printf("yay\n");
-		else {
-			int content_length = get_content_length(request);
+			if (*start_of_body == '\0')
+				printf("yay\n");
+			else {
+				int content_length = get_content_length(request);
 
-			post_save(start_of_body, content_length);
+				post_save(start_of_body, content_length);
 
-			char *response = "{\"status\": \"ok\"}";
+				char *response = "{\"status\": \"ok\"}";
 
-			send_response(fd, "HTTP/1.1 200 OK", "text/json", response, strlen(response));
+				send_response(fd, "HTTP/1.1 200 OK", "text/json", response, strlen(response));
+			}
 		}
 	}
+
+	return 0;
 }
 
 void *thread_handle_request(void *data)
