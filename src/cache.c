@@ -214,20 +214,20 @@ void cache_delete(struct cache *cache, struct cache_entry *ce)
 void cache_print(struct cache *cache)
 {
 	struct cache_entry *ce = cache->head;
+	size_t totalsize = 0;
 
 	printf("{\n");
 	int i = 1;
 	if (ce == NULL) {
-		printf("null");
-		return;
+		printf("\tNULL\n");
 	} else {
 		while (ce != NULL) {
-			printf("\t%d: %s\n", i, ce->path);
+			printf("\t%d: %s (%dK)\n", i, ce->path, ce->content_length / 1024);
+			totalsize += ce->content_length;
 			ce = ce->next;
 			i++;
 		}
 	}
+	printf("\tTOTAL: %ldK or %ldM\n", totalsize / 1024, totalsize / 1024 / 1024);
 	printf("}\n");
-
-	printf("\n");
 }

@@ -375,14 +375,42 @@ void *console_thread(void *data)
 	char command[512] = {0};
 
 	while (1) {
-		printf("> ");
+		printf("\r> ");
 		scanf("%s", command);
 
 		if (strstr(command, "hello")) {
 			printf("Hello\n");
 		} else if (strstr(command, "cache")) {
 			cache_print(cachep);
+		} else if (strstr(command, "clearit")) {
+			if (cachep->head == NULL) continue;
+			struct cache_entry *cur = cachep->head;
+
+			while (cur != NULL) {
+				struct cache_entry *saved = cur;
+				cur = saved->next;
+				cache_delete(cachep, saved);
+			}
+		} else if (strstr(command, "dump")) {
+			char name[512];
+			printf("name: ");
+			scanf("%s", name);
+			printf("\n");
+
+			struct cache_entry *ce = cache_get(cachep, name);
+
+			if (ce == NULL) {
+				printf("No cache entry with that name\n");
+			} else {
+				FILE *f = fopen("dump.txt", "w");
+
+				fwrite(ce->content, 1, ce->content_length, f);
+
+				fclose(f);
+			}
 		}
+
+		memset(command, 0, 512);
 	}
 }
 
