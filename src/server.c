@@ -368,6 +368,24 @@ void *thread_handle_request(void *data)
 	pthread_exit((void *) 0);
 }
 
+void *console_thread(void *data)
+{
+	struct cache *cachep = (struct cache *) data;
+
+	char command[512] = {0};
+
+	while (1) {
+		printf("> ");
+		scanf("%s", command);
+
+		if (strstr(command, "hello")) {
+			printf("Hello\n");
+		} else if (strstr(command, "cache")) {
+			cache_print(cachep);
+		}
+	}
+}
+
 /**
  * Main
  */
@@ -391,6 +409,9 @@ int main(int argc, char *argv[])
 	}
 
 	printf("webserver: waiting for connections on port %s...\n", PORT);
+
+	pthread_create(&threadid, NULL, console_thread, (void *) cache);
+	threadid++;
 
 	while (1) {
 		socklen_t sin_size = sizeof(their_addr);
