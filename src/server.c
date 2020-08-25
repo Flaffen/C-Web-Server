@@ -194,10 +194,10 @@ void get_file(int fd, struct cache *cache, char *request_path)
 
 	if (ce == NULL) {
 		// file = file_load(path);
-		struct myfile_data *file = load_file(path);
+		file = load_file(path);
 
 		if (file == NULL) {
-			resp_404(fd);
+			send_response(fd, "HTTP/1.1 404 NOT FOUND", "text/plain", "not found", 6);
 			return;
 		}
 
@@ -224,8 +224,6 @@ void get_file(int fd, struct cache *cache, char *request_path)
 			free(file);
 		}
 	}
-
-	cache_print(cache);
 
 	send_response(fd, "HTTP/1.1 200 OK", ce->content_type, ce->content, ce->content_length);
 }
@@ -363,6 +361,7 @@ void *thread_handle_request(void *data)
 
 	handle_http_request(tdata->sockfd, tdata->cache);
 
+	printf("closing %d\n", tdata->sockfd);
 	close(tdata->sockfd);
 	free(tdata);
 
@@ -372,7 +371,7 @@ void *thread_handle_request(void *data)
 /**
  * Main
  */
-int main(void)
+int main(int argc, char *argv[])
 {
 	int newfd;
 	struct sockaddr_storage their_addr;
