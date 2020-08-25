@@ -39,6 +39,7 @@
 #define PORT "3490"  // the port users will be connecting to
 
 pthread_mutex_t cachemutex;
+pthread_mutex_t copy_thread_data_mutex;
 
 struct thread_data {
 	int sockfd;
@@ -59,8 +60,10 @@ struct thread_data {
  */
 int send_response(int fd, char *header, char *content_type, void *body, int content_length)
 {
-	const int max_response_size = 262144 + content_length;
-	char response[max_response_size];
+	size_t max_response_size = 262144 + content_length;
+	// char response[max_response_size];
+	char *response;
+	response = malloc(max_response_size);
 	char buf[1024];
 
 	memset(response, 0, max_response_size);
@@ -95,6 +98,10 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 
 	// Send it all!
 	int rv = send(fd, response, response_length, 0);
+
+	free(response);
+
+	printf("sent %d bytes of data, was supposed to send %d bytes\n", rv, response_length);
 
 	if (rv < 0) {
 		perror("send");
@@ -396,7 +403,7 @@ void *thread_handle_request(void *data)
 
 	printf("closing %d\n", tdata->sockfd);
 	close(tdata->sockfd);
-	free(tdata);
+	free(data);
 
 	pthread_exit((void *) 0);
 }
@@ -455,11 +462,12 @@ int main(int argc, char *argv[])
 	int newfd;
 	struct sockaddr_storage their_addr;
 	char s[INET6_ADDRSTRLEN];
-	pthread_t threadid;
+	pthread_t threadid = 0;
 
 	struct cache *cache = cache_create(50, 0);
-	threadid = 0;
+
 	pthread_mutex_init(&cachemutex, NULL);
+	pthread_mutex_init(&copy_thread_data_mutex, NULL);
 
 	// Get a listening socket
 	int listenfd = get_listener_socket(PORT);
@@ -472,6 +480,7 @@ int main(int argc, char *argv[])
 	printf("webserver: waiting for connections on port %s...\n", PORT);
 
 	pthread_create(&threadid, NULL, console_thread, (void *) cache);
+	pthread_detach(threadid);
 	threadid++;
 
 	while (1) {
@@ -492,6 +501,7 @@ int main(int argc, char *argv[])
 		data->sockfd = newfd;
 		data->cache = cache;
 		pthread_create(&threadid, NULL, thread_handle_request, (void *) data);
+		pthread_detach(threadid);
 		threadid++;
 	}
 

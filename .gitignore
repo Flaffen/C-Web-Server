@@ -11,3 +11,5 @@ src/cache_tests/cache_tests.log
 target/
 data.txt
 hexdump.bin
+*.exe
+*.zip
